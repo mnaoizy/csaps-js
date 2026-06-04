@@ -2,6 +2,15 @@
 
 **Cubic spline approximation (smoothing) for Node.js and the browser.**
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mnaoizy/csaps-js/main/assets/surface-dark.svg">
+    <img alt="csaps-js 2-D gridded smoothing: a noisy sampled surface smoothed onto a finer grid" src="https://raw.githubusercontent.com/mnaoizy/csaps-js/main/assets/surface-light.svg" width="820">
+  </picture>
+</p>
+
+<p align="center"><sub>A noisy <code>peaks()</code> surface sampled on a 22×22 grid, smoothed by csaps-js and evaluated on a finer 46×46 grid. <a href="./scripts/make-surface.mjs">(source)</a></sub></p>
+
 A dependency-free TypeScript port of the Python [`csaps`](https://github.com/espdev/csaps)
 library. It computes a **cubic smoothing spline** that balances closeness to the
 data against smoothness of the curve, for **univariate**, **multivariate** and
