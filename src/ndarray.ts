@@ -27,20 +27,23 @@ export class NdArray {
     const newShape = perm.map((axis) => this.shape[axis]);
 
     const oldStrides = cStrides(this.shape);
-    const permutedStrides = perm.map((axis) => oldStrides[axis]);
+    const ps = perm.map((axis) => oldStrides[axis]); // source stride per new axis
 
     const total = this.data.length;
+    const src = this.data;
     const out = new Float64Array(total);
     const idx = new Array(d).fill(0);
 
+    // Walk the output in C-order while tracking the source offset incrementally,
+    // so the source index is never recomputed from scratch.
+    let off = 0;
     for (let pos = 0; pos < total; pos++) {
-      let off = 0;
-      for (let a = 0; a < d; a++) off += idx[a] * permutedStrides[a];
-      out[pos] = this.data[off];
-      // Increment the C-order odometer over newShape.
+      out[pos] = src[off];
       for (let a = d - 1; a >= 0; a--) {
+        off += ps[a];
         if (++idx[a] < newShape[a]) break;
         idx[a] = 0;
+        off -= ps[a] * newShape[a];
       }
     }
 

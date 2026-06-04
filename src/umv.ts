@@ -60,21 +60,21 @@ function normalizeSmooth(x: Float64Array, w: Float64Array, smooth: number | null
 }
 
 /**
- * Build the cubic smoothing spline for `y2d` (an `N × M` array of `N` data
- * components / curves sampled at the `M` sites `x`).
+ * Build the cubic smoothing spline for `y` — a flat, row-major `N × M` buffer of
+ * `N` data components / curves sampled at the `M` sites `x` (`y[n * M + i]`).
  *
  * @returns a {@link PPoly} with coefficients shaped `(order, pieces, N)` and the
  *          effective smoothing parameter.
  */
 export function makeSpline(
   x: Float64Array,
-  y2d: number[][],
+  y: Float64Array,
+  N: number,
   w: Float64Array,
   smooth: number | null,
   normalizedsmooth: boolean,
 ): MakeSplineResult {
   const M = x.length;
-  const N = y2d.length;
 
   const dx = new Float64Array(M - 1);
   for (let i = 0; i < M - 1; i++) {
@@ -84,21 +84,21 @@ export function makeSpline(
     }
   }
 
-  // Divided differences dy/dx for every component: N × (M-1).
-  const dydx: number[][] = new Array(N);
+  // Divided differences dy/dx for every component: flat N × (M-1).
+  const md = M - 1;
+  const dydx = new Float64Array(N * md);
   for (let n = 0; n < N; n++) {
-    const row = new Float64Array(M - 1);
-    const yn = y2d[n];
-    for (let i = 0; i < M - 1; i++) row[i] = (yn[i + 1] - yn[i]) / dx[i];
-    dydx[n] = row as unknown as number[];
+    const yb = n * M;
+    const db = n * md;
+    for (let i = 0; i < md; i++) dydx[db + i] = (y[yb + i + 1] - y[yb + i]) / dx[i];
   }
 
   // Corner case: two points → linear segment (order-2 spline), p ≡ 1.
   if (M === 2) {
     const c = new Float64Array(2 * 1 * N);
     for (let n = 0; n < N; n++) {
-      c[0 * N + n] = dydx[n][0]; // slope
-      c[1 * N + n] = y2d[n][0]; // intercept at left break
+      c[0 * N + n] = dydx[n * md]; // slope
+      c[1 * N + n] = y[n * M]; // intercept at left break
     }
     return { pp: new PPoly(c, Float64Array.from(x), 2, 1, N), smooth: 1 };
   }
@@ -157,57 +157,75 @@ export function makeSpline(
   // Right-hand side: second divided difference of dy/dx, shape m × N.
   const B = new Float64Array(m * N);
   for (let i = 0; i < m; i++) {
-    for (let n = 0; n < N; n++) B[i * N + n] = dydx[n][i + 1] - dydx[n][i];
+    for (let n = 0; n < N; n++) {
+      const db = n * md + i;
+      B[i * N + n] = dydx[db + 1] - dydx[db];
+    }
   }
 
   const U = ldltBandSolve(m, 2, lower, B, N); // m × N
 
-  // u padded with zero rows top & bottom → logical index 0..M-1.
-  const uAt = (r: number, n: number): number => (r === 0 || r === M - 1 ? 0 : U[(r - 1) * N + n]);
+  // u padded with zero rows at top & bottom → shape M × N (rows 0 and M-1 are 0).
+  const uFull = new Float64Array(M * N);
+  for (let i = 1; i < M - 1; i++) {
+    const src = (i - 1) * N;
+    const dst = i * N;
+    for (let n = 0; n < N; n++) uFull[dst + n] = U[src + n];
+  }
 
-  // d1 = diff(pad(u)) / dx, shape (M-1) × N.
+  // d1 = diff(uFull) / dx, shape (M-1) × N.
   const d1 = new Float64Array((M - 1) * N);
   for (let i = 0; i < M - 1; i++) {
     const inv = dr[i];
-    for (let n = 0; n < N; n++) d1[i * N + n] = (uAt(i + 1, n) - uAt(i, n)) * inv;
+    const a = i * N;
+    const b = a + N;
+    for (let n = 0; n < N; n++) d1[a + n] = (uFull[b + n] - uFull[a + n]) * inv;
   }
-  const d1At = (r: number, n: number): number => (r === 0 || r === M ? 0 : d1[(r - 1) * N + n]);
 
-  // d2 = diff(pad(d1)), shape M × N.
+  // d2 = diff(pad(d1)), shape M × N: ends are ±d1, interior is the first difference.
   const d2 = new Float64Array(M * N);
-  for (let i = 0; i < M; i++) {
-    for (let n = 0; n < N; n++) d2[i * N + n] = d1At(i + 1, n) - d1At(i, n);
+  const lastD1 = (M - 2) * N;
+  const lastD2 = (M - 1) * N;
+  for (let n = 0; n < N; n++) {
+    d2[n] = d1[n];
+    d2[lastD2 + n] = -d1[lastD1 + n];
+  }
+  for (let i = 1; i < M - 1; i++) {
+    const di = i * N;
+    const dim1 = di - N;
+    for (let n = 0; n < N; n++) d2[di + n] = d1[di + n] - d1[dim1 + n];
   }
 
   // yi = yᵀ − pp6·W⁻¹·d2, shape M × N.
   const yi = new Float64Array(M * N);
   for (let i = 0; i < M; i++) {
     const f = pp6 * iw[i];
-    for (let n = 0; n < N; n++) yi[i * N + n] = y2d[n][i] - f * d2[i * N + n];
+    const row = i * N;
+    for (let n = 0; n < N; n++) yi[row + n] = y[n * M + i] - f * d2[row + n];
   }
 
-  // pu = pad(p·u), logical index 0..M-1.
-  const puAt = (r: number, n: number): number => (r === 0 || r === M - 1 ? 0 : p * U[(r - 1) * N + n]);
-
   // Assemble coefficients, shape (4, M-1, N), highest order first.
+  // pu = pad(p·u) = p·uFull is folded in inline (no separate buffer).
   const pieces = M - 1;
   const c = new Float64Array(4 * pieces * N);
+  const o1 = pieces * N;
+  const o2 = 2 * pieces * N;
+  const o3 = 3 * pieces * N;
   for (let i = 0; i < pieces; i++) {
     const h = dx[i];
     const invh = dr[i];
+    const ri = i * N;
+    const ri1 = ri + N;
     for (let n = 0; n < N; n++) {
-      const pu0 = puAt(i, n);
-      const pu1 = puAt(i + 1, n);
-      const yi0 = yi[i * N + n];
-      const yi1 = yi[(i + 1) * N + n];
-      const c1 = (pu1 - pu0) * invh;
-      const c2 = 3 * pu0;
-      const c3 = (yi1 - yi0) * invh - h * (2 * pu0 + pu1);
-      const c4 = yi0;
-      c[(0 * pieces + i) * N + n] = c1;
-      c[(1 * pieces + i) * N + n] = c2;
-      c[(2 * pieces + i) * N + n] = c3;
-      c[(3 * pieces + i) * N + n] = c4;
+      const pu0 = p * uFull[ri + n];
+      const pu1 = p * uFull[ri1 + n];
+      const yi0 = yi[ri + n];
+      const yi1 = yi[ri1 + n];
+      const ci = ri + n;
+      c[ci] = (pu1 - pu0) * invh;
+      c[o1 + ci] = 3 * pu0;
+      c[o2 + ci] = (yi1 - yi0) * invh - h * (2 * pu0 + pu1);
+      c[o3 + ci] = yi0;
     }
   }
 
@@ -245,7 +263,8 @@ function toFloat64(a: ArrayLike<number>): Float64Array {
 
 interface Prepared {
   x: Float64Array;
-  y2d: number[][];
+  y: Float64Array; // flat, row-major N × M (y[n * M + i])
+  N: number;
   w: Float64Array;
   restore: (flat: Float64Array, L: number) => number[] | number[][];
 }
@@ -260,30 +279,37 @@ function prepareUnivariate(
   const M = x.length;
   if (x.length < 2) throw new Error("'xdata' must contain at least 2 data points.");
 
-  let y2d: number[][];
+  let y: Float64Array;
+  let N: number;
   let isVector: boolean;
   let transposed = false;
 
   const first = (ydata as unknown[])[0];
   if (Array.isArray(first) || first instanceof Float64Array) {
     // 2-D ydata: shape [R][C].
-    const y = ydata as number[][];
-    const R = y.length;
-    const C = y[0].length;
+    const yin = ydata as number[][];
+    const R = yin.length;
+    const C = yin[0].length;
     const ndimY = 2;
     const ax = axis < 0 ? ndimY + axis : axis;
     if (ax === 1) {
       if (C !== M) throw new Error(`'ydata' shape[${ax}] (${C}) must equal 'xdata' size (${M}).`);
-      y2d = y.map((row) => Array.from(row));
+      N = R;
+      y = new Float64Array(N * M);
+      for (let n = 0; n < N; n++) {
+        const row = yin[n];
+        const base = n * M;
+        for (let i = 0; i < M; i++) y[base + i] = row[i];
+      }
     } else if (ax === 0) {
       if (R !== M) throw new Error(`'ydata' shape[${ax}] (${R}) must equal 'xdata' size (${M}).`);
       // columns are curves → transpose to N × M.
       transposed = true;
-      y2d = new Array(C);
-      for (let n = 0; n < C; n++) {
-        const row = new Array(M);
-        for (let i = 0; i < M; i++) row[i] = y[i][n];
-        y2d[n] = row;
+      N = C;
+      y = new Float64Array(N * M);
+      for (let i = 0; i < M; i++) {
+        const row = yin[i];
+        for (let n = 0; n < N; n++) y[n * M + i] = row[n];
       }
     } else {
       throw new Error(`Unsupported axis ${axis} for 2-D ydata.`);
@@ -291,9 +317,10 @@ function prepareUnivariate(
     isVector = false;
   } else {
     // 1-D ydata.
-    const y = Array.from(ydata as ArrayLike<number>);
-    if (y.length !== M) throw new Error(`'ydata' size (${y.length}) must equal 'xdata' size (${M}).`);
-    y2d = [y];
+    const yin = ydata as ArrayLike<number>;
+    if (yin.length !== M) throw new Error(`'ydata' size (${yin.length}) must equal 'xdata' size (${M}).`);
+    N = 1;
+    y = toFloat64(yin);
     isVector = true;
   }
 
@@ -305,7 +332,6 @@ function prepareUnivariate(
     if (w.length !== M) throw new Error('Weights vector size must equal xdata size.');
   }
 
-  const N = y2d.length;
   const restore = (flat: Float64Array, L: number): number[] | number[][] => {
     if (isVector) {
       const out = new Array(L);
@@ -330,7 +356,7 @@ function prepareUnivariate(
     return out;
   };
 
-  return { x, y2d, w, restore };
+  return { x, y, N, w, restore };
 }
 
 /**
@@ -346,7 +372,7 @@ export class CubicSmoothingSpline {
   constructor(xdata: UnivariateData, ydata: MultivariateData, options: CubicSmoothingSplineOptions = {}) {
     const { weights, smooth = null, axis = -1, normalizedsmooth = false } = options;
     const prep = prepareUnivariate(xdata, ydata, weights, axis);
-    const res = makeSpline(prep.x, prep.y2d, prep.w, smooth ?? null, normalizedsmooth);
+    const res = makeSpline(prep.x, prep.y, prep.N, prep.w, smooth ?? null, normalizedsmooth);
     this.pp = res.pp;
     this.smooth = res.smooth;
     this.restore = prep.restore;

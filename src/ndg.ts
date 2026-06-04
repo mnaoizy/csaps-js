@@ -74,17 +74,10 @@ function buildGrid(
     const total = coeffs.data.length;
     const Nrest = total / lastSize;
 
-    // Treat the buffer as Nrest "curves" of length lastSize.
-    const y2d: number[][] = new Array(Nrest);
-    for (let n = 0; n < Nrest; n++) {
-      const row = new Array<number>(lastSize);
-      const base = n * lastSize;
-      for (let col = 0; col < lastSize; col++) row[col] = coeffs.data[base + col];
-      y2d[n] = row;
-    }
-
+    // The buffer is already a row-major Nrest × lastSize block of "curves",
+    // exactly the layout makeSpline expects — pass it through with no copy.
     const w = weights[i] ?? new Float64Array(lastSize).fill(1);
-    const res = makeSpline(xs[i], y2d, w, smooth[i], normalizedsmooth);
+    const res = makeSpline(xs[i], coeffs.data, Nrest, w, smooth[i], normalizedsmooth);
     const order = res.pp.order;
     const pcs = res.pp.pieces;
     orders[i] = order;
