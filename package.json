@@ -10,9 +10,14 @@
   "jsdelivr": "./dist/index.global.js",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "files": [
@@ -23,11 +28,12 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepack": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "lint": "tsc --noEmit"
   },
   "keywords": [
     "csaps",
@@ -43,18 +49,18 @@
     "browser",
     "typescript"
   ],
-  "author": "",
+  "author": "mnaoizy",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-name/csaps-js.git"
+    "url": "git+https://github.com/mnaoizy/csaps-js.git"
   },
-  "homepage": "https://github.com/your-name/csaps-js#readme",
+  "homepage": "https://github.com/mnaoizy/csaps-js#readme",
   "bugs": {
-    "url": "https://github.com/your-name/csaps-js/issues"
+    "url": "https://github.com/mnaoizy/csaps-js/issues"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=18.0.0"
   },
   "devDependencies": {
     "tsup": "^8.3.0",
