@@ -1,0 +1,64 @@
+{
+  "name": "csaps-js",
+  "version": "0.1.0",
+  "description": "Cubic spline approximation (smoothing) for Node.js and the browser. A dependency-free TypeScript port of the Python csaps library — univariate, multivariate and N-D gridded data smoothing.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/index.global.js",
+  "jsdelivr": "./dist/index.global.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "csaps",
+    "spline",
+    "cubic-spline",
+    "smoothing-spline",
+    "smoothing",
+    "interpolation",
+    "approximation",
+    "curve-fitting",
+    "numerical",
+    "ndgrid",
+    "browser",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-name/csaps-js.git"
+  },
+  "homepage": "https://github.com/your-name/csaps-js#readme",
+  "bugs": {
+    "url": "https://github.com/your-name/csaps-js/issues"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
