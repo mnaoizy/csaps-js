@@ -1,6 +1,6 @@
 {
   "name": "csaps-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cubic spline approximation (smoothing) for Node.js and the browser. A dependency-free TypeScript port of the Python csaps library — univariate, multivariate and N-D gridded data smoothing.",
   "type": "module",
   "main": "./dist/index.cjs",
